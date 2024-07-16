@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
+
 import * as THREE from 'three'
 import { useEffect, useRef, useState } from 'react'
 import { useGLTF, useTexture, Environment, Lightformer } from '@react-three/drei'
-import { Canvas, extend, useThree, useFrame, ReactThreeFiber } from '@react-three/fiber'
+import { Canvas, extend, useThree, useFrame, type Object3DNode } from '@react-three/fiber'
 import { BallCollider, CuboidCollider, Physics, RigidBody, useRopeJoint, useSphericalJoint } from '@react-three/rapier'
 import { MeshLineGeometry, MeshLineMaterial } from 'meshline'
 
@@ -11,16 +13,40 @@ import { MeshLineGeometry, MeshLineMaterial } from 'meshline'
 // catalog of known JSX elements.
 
 extend({ MeshLineGeometry, MeshLineMaterial })
-extend({ MeshLineGeometry, MeshLineMaterial })
-useGLTF.preload('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb')
+
+useGLTF.preload('./tag-no-name.glb')
 useTexture.preload('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg')
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      meshLineGeometry: ReactThreeFiber.Object3DNode<MeshLineGeometry, typeof MeshLineGeometry>
-      meshLineMaterial: ReactThreeFiber.Object3DNode<MeshLineMaterial, typeof MeshLineMaterial>
-    }
+declare module '@react-three/fiber' {
+  interface ThreeElements {
+    meshLineGeometry: Object3DNode<MeshLineGeometry, typeof MeshLineGeometry>
+    meshLineMaterial: Object3DNode<MeshLineMaterial, typeof MeshLineMaterial>
+  }
+}
+
+type BandProps = {
+  maxSpeed?: number
+  minSpeed?: number
+}
+
+type MeshLineMesh = THREE.Mesh & {
+  geometry: MeshLineGeometry
+  material: MeshLineMaterial
+}
+
+interface CustomMaterial extends THREE.Material {
+  map?: THREE.Texture;
+}
+
+type GLTFResult = {
+  nodes: {
+    card?: THREE.Mesh
+    clip?: THREE.Mesh
+    clamp?: THREE.Mesh
+  }
+  materials: {
+    base?: CustomMaterial
+    metal?: CustomMaterial
   }
 }
 
@@ -50,23 +76,23 @@ export function IdCard() {
 }
 
 // Setting up the band of the Id Card.
-const Band = ({ maxSpeed = 50, minSpeed = 10 }) => {
+
+const Band: React.FC<BandProps> = ({ maxSpeed = 50, minSpeed = 10 }) => {
   // Different components of the band
   // By having all of them be ref, we make sure that when they change the component is not RE-RENDERED.
-  const band = useRef<any>()
-  const fixed = useRef<any>()
-  const joint1 = useRef<any>()
-  const joint2 = useRef<any>()
-  const joint3 = useRef<any>()
-  const card = useRef<any>()
-
+  const band = useRef<MeshLineMesh>(null)
+  const fixed = useRef<any>(null)
+  const joint1 = useRef<any>(null)
+  const joint2 = useRef<any>(null)
+  const joint3 = useRef<any>(null)
+  const card = useRef<any>(null)
   const vec = new THREE.Vector3()
   const angle = new THREE.Vector3()
   const rotation = new THREE.Vector3()
   const direction = new THREE.Vector3()
 
   const segmentProps : any = { type: 'dynamic', canSleep: true, colliders: false, angularDamping: 2, linearDamping: 2 }
-  const { nodes, materials } : any = useGLTF('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/5huRVDzcoDwnbgrKUo1Lzs/53b6dd7d6b4ffcdbd338fa60265949e1/tag.glb')
+  const { nodes, materials } = useGLTF('./tag-no-name.glb') as GLTFResult
   const texture = useTexture('https://assets.vercel.com/image/upload/contentful/image/e5382hct74si/SOT1hmCesOHxEYxL7vkoZ/c57b29c85912047c414311723320c16b/band.jpg')
 
   // Canvas size 
@@ -76,7 +102,7 @@ const Band = ({ maxSpeed = 50, minSpeed = 10 }) => {
   const [hovered, hover] = useState(false)
 
   // Catmull-Rom curve (interesting path curve while interaction)
-  const [curve] = useState<any>(() => new THREE.CatmullRomCurve3([
+  const [curve] = useState<THREE.CatmullRomCurve3>(() => new THREE.CatmullRomCurve3([
     new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
   ]))
 
@@ -103,7 +129,7 @@ const Band = ({ maxSpeed = 50, minSpeed = 10 }) => {
       vec.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera)
       direction.copy(vec).sub(state.camera.position).normalize()
       vec.add(direction.multiplyScalar(state.camera.position.length()))
-      ;[card, joint1, joint2, joint3, fixed].forEach((ref) => ref.current?.wakeUp())
+      ;[card, joint1, joint2, joint3, fixed].forEach((ref : any) => ref.current?.wakeUp())
       card.current?.setNextKinematicTranslation({ x: vec.x - dragged.x, y: vec.y - dragged.y, z: vec.z - dragged.z })
     }
 
@@ -116,11 +142,13 @@ const Band = ({ maxSpeed = 50, minSpeed = 10 }) => {
       })
 
       // Calculate catmul curve      
-      curve.points[0].copy(joint3.current.translation())
-      curve.points[1].copy(joint2.current.translation())
-      curve.points[2].copy(joint1.current.translation())
-      curve.points[3].copy(fixed.current.translation())
-      band.current.geometry.setPoints(curve.getPoints(32))
+      curve.points[0]?.copy(joint3.current.translation())
+      curve.points[1]?.copy(joint2.current.translation())
+      if (joint1.current){
+        curve.points[2]?.copy(joint1.current.translation())
+      }
+      curve.points[3]?.copy(fixed.current.translation())
+      band.current?.geometry.setPoints(curve.getPoints(32))
       // Tilt it back towards the screen
       angle.copy(card.current.angvel())
       rotation.copy(card.current.rotation())
